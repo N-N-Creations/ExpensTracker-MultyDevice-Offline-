@@ -23,10 +23,11 @@
   - [2. 🏦 Bank Accounts & Cash Management](#2--bank-accounts--cash-management)
   - [3. 🛍️ BNPL & Reserved Commitments](#3-️-bnpl--reserved-commitments-tabby--tamara--bills)
   - [4. 💵 Physical Cash Denomination Counter](#4--physical-cash-denomination-counter)
-  - [5. 🔄 Local Peer-to-Peer Device Sync](#5--local-peer-to-peer-device-sync-no-cloud-needed)
+  - [5. 🔄 Local Peer-to-Peer Device Sync & Rotating Security PIN](#5--local-peer-to-peer-device-sync--rotating-security-pin)
   - [6. 📈 Financial Analytics & Visual Reports](#6--financial-analytics--visual-reports)
   - [7. 🎯 Budget Planning & Safe Daily Spend](#7--budget-planning--safe-daily-spend)
   - [8. 💱 Multi-Currency & Data Portability](#8--multi-currency--data-portability)
+  - [9. 🛡️ Danger Zone & GitHub-Style Data Wipe Verification](#9-️-danger-zone--github-style-data-wipe-verification)
 - [🛠️ Architecture & Tech Stack](#️-architecture--tech-stack)
 - [⚙️ Technical Specifications](#️-technical-specifications)
 - [📱 Getting Started](#-getting-started)
@@ -60,20 +61,23 @@
 - **Custom Denominations**: Add or customize banknotes and coins to match any regional currency.
 - **One-Tap Clipboard Copy**: Share or save formatted denomination summaries instantly.
 
-### 5. 🔄 Local Peer-to-Peer Device Sync (No Cloud Needed)
+### 5. 🔄 Local Peer-to-Peer Device Sync & Rotating Security PIN
 Sync your ledger across your phone, tablet, and family devices seamlessly over your private network:
 
 ```
 ┌─────────────────┐       Local Wi-Fi / Hotspot       ┌─────────────────┐
 │ Device A (Host) │ ◄───────────────────────────────► │ Device B (Peer) │
-│ Embedded Server │     Encrypted Local Payload       │ Socket Client   │
+│ Embedded Server │     🔒 30s Rotating PIN Auth      │ Socket Client   │
+│ & 6-Digit PIN   │     Encrypted Local Payload       │ (Enter PIN)     │
 └─────────────────┘                                   └─────────────────┘
 ```
 
 <details>
-<summary><b>Click to expand P2P Sync Mechanics</b></summary>
+<summary><b>Click to expand P2P Sync & PIN Security Mechanics</b></summary>
 
 - **Zero Cloud Dependency**: Operates entirely over local Wi-Fi or mobile personal hotspot via direct socket communication.
+- **🔒 30-Second Rotating Security PIN**: Connecting devices must supply the active 6-digit PIN displayed on the host screen. The PIN automatically rotates every 30 seconds to protect unattended sessions and prevent unauthorized access on public/shared Wi-Fi.
+- **Live Countdown & Progress Bar**: Real-time visual progress indicator and seconds countdown (`30s` down to `1s`) with instant manual PIN refresh and copy controls.
 - **Conflict-Free Two-Way Merge**: Every transaction is assigned an immutable UUID, ensuring duplicate-free reconciliation.
 - **Incremental Fast Delta Sync**: High-speed syncing based on per-device transaction timestamps.
 - **Device Origin Attribution**: Every synced record identifies its originating device (e.g., `Pixel 8`, `Galaxy S24`).
@@ -97,6 +101,11 @@ Sync your ledger across your phone, tablet, and family devices seamlessly over y
 - **Currency Manager**: Set primary currency symbols and manage custom exchange rates.
 - **Full JSON Backup & Restore**: Backup and restore your complete database offline with a single tap.
 - **CSV Data Export**: Export clean, standardized CSV files formatted for Microsoft Excel, Google Sheets, or Apple Numbers.
+
+### 9. 🛡️ Danger Zone & GitHub-Style Data Wipe Verification
+- **Zero Dummy Data Guarantee**: Fresh installations launch entirely clean without mock transactions or pre-filled records.
+- **Type-To-Confirm Challenge Verification**: High-risk wipe operations generate dynamic alphanumeric confirmation codes (e.g. `DELETE-9B2K7`, `PURGE-3F8M1`, `RESET-8X2Q9`) requiring exact, case-sensitive keyboard input before execution.
+- **Granular Reset Capabilities**: Selectively wipe specific tables (Transactions, Bank Accounts, BNPL / Reserved Commitments, Budgets, Cash Denominations) or trigger a comprehensive Factory Reset.
 
 ---
 
@@ -174,6 +183,8 @@ app/
 > - 🛡️ **Zero Cloud Storage**: No remote database servers, accounts, or cloud logins.
 > - 🚫 **Zero Telemetry & Ads**: No analytics SDKs, trackers, or advertising frameworks.
 > - 🔐 **Local Network Sync**: Direct peer-to-peer communication that never leaves your local Wi-Fi or hotspot.
+> - 🔑 **30-Second Expiring PIN**: Zero unauthorized access on local networks through auto-rotating security keys.
+> - 🛡️ **Accidental Wipe Protection**: GitHub-style type-to-confirm challenge codes preventing unintended data deletion.
 
 ---
 

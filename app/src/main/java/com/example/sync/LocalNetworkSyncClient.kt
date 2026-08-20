@@ -37,6 +37,7 @@ class LocalNetworkSyncClient(
     suspend fun syncWithHost(
         hostIp: String,
         port: Int = 8890,
+        pin: String = "",
         forceFullSync: Boolean = false
     ): Boolean = withContext(Dispatchers.IO) {
         _syncState.value = ClientSyncState.Connecting
@@ -45,7 +46,14 @@ class LocalNetworkSyncClient(
         val infoUrlString = "http://$baseUrl/info"
         val syncUrlString = "http://$baseUrl/sync"
 
-        log("Connecting to peer at: $syncUrlString")
+        if (pin.trim().length < 4) {
+            val errMsg = "Please enter the 6-digit Security PIN shown on the other device."
+            log("Sync aborted: Missing or incomplete Security PIN")
+            _syncState.value = ClientSyncState.Error(errMsg)
+            return@withContext false
+        }
+
+        log("Connecting to peer at: $syncUrlString (PIN: ${pin.trim().take(2)}****)")
 
         try {
             // Optional quick info probe to check host device ID and identify last sync watermark
@@ -82,6 +90,7 @@ class LocalNetworkSyncClient(
             connection.requestMethod = "POST"
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
             connection.setRequestProperty("Accept", "application/json")
+            connection.setRequestProperty("X-Sync-Pin", pin.trim())
             connection.connectTimeout = 15000
             connection.readTimeout = 25000
             connection.doOutput = true
@@ -127,6 +136,18 @@ class LocalNetworkSyncClient(
                 _syncState.value = ClientSyncState.Success(successMsg, mergedCount)
                 connection.disconnect()
                 return@withContext true
+            } else if (responseCode == HttpURLConnection.HTTP_UNAUTHORIZED) {
+                val errorBody = try {
+                    connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                } catch (_: Exception) { null }
+                val customMsg = if (!errorBody.isNullOrBlank()) {
+                    try { JSONObject(errorBody).optString("message", "") } catch (_: Exception) { "" }
+                } else ""
+                val errMsg = if (customMsg.isNotBlank()) customMsg else "🔒 Invalid Security PIN. Please check the 6-digit PIN shown on the other device."
+                log("Authentication failed: $errMsg")
+                _syncState.value = ClientSyncState.Error(errMsg)
+                connection.disconnect()
+                return@withContext false
             } else {
                 val errorBody = try {
                     connection.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }

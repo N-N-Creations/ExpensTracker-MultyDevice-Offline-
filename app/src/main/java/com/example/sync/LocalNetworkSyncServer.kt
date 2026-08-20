@@ -8,6 +8,7 @@ import com.example.data.repository.ExpenseRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
@@ -39,12 +40,48 @@ class LocalNetworkSyncServer(
     private val _serverState = MutableStateFlow<ServerState>(ServerState.Stopped)
     val serverState = _serverState.asStateFlow()
 
+    private val _serverPin = MutableStateFlow<String>(generateRandomPin())
+    val serverPin = _serverPin.asStateFlow()
+
+    // PIN remaining time in seconds (30s cycle)
+    private val _pinSecondsRemaining = MutableStateFlow<Int>(PIN_EXPIRY_SECONDS)
+    val pinSecondsRemaining = _pinSecondsRemaining.asStateFlow()
+
     private val _serverLogs = MutableStateFlow<List<String>>(emptyList())
     val serverLogs = _serverLogs.asStateFlow()
 
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
+    private var pinTimerJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+
+    fun regeneratePin(): String {
+        val newPin = generateRandomPin()
+        _serverPin.value = newPin
+        _pinSecondsRemaining.value = PIN_EXPIRY_SECONDS
+        log("Security Sync PIN refreshed: $newPin (Valid for 30s)")
+        return newPin
+    }
+
+    private fun startPinTimer() {
+        pinTimerJob?.cancel()
+        pinTimerJob = scope.launch {
+            while (isActive) {
+                for (sec in PIN_EXPIRY_SECONDS downTo 1) {
+                    _pinSecondsRemaining.value = sec
+                    delay(1000L)
+                }
+                // When timer reaches 0, auto-regenerate new PIN
+                regeneratePin()
+            }
+        }
+    }
+
+    private fun stopPinTimer() {
+        pinTimerJob?.cancel()
+        pinTimerJob = null
+        _pinSecondsRemaining.value = PIN_EXPIRY_SECONDS
+    }
 
     fun log(msg: String) {
         val time = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
@@ -57,6 +94,12 @@ class LocalNetworkSyncServer(
             return
         }
 
+        if (_serverPin.value.isBlank()) {
+            _serverPin.value = generateRandomPin()
+        }
+
+        startPinTimer()
+
         serverJob?.cancel()
         serverJob = scope.launch {
             try {
@@ -65,7 +108,9 @@ class LocalNetworkSyncServer(
                 serverSocket = socket
                 _serverState.value = ServerState.Running(ip, port)
                 val myDevice = deviceIdentityService.getDeviceName()
+                val activePin = _serverPin.value
                 log("Sync Server started at http://$ip:$port ($myDevice)")
+                log("Security PIN active: $activePin (Required by connecting peer)")
                 log("Ready to accept 2-way sync requests from other devices.")
 
                 while (isActive && !socket.isClosed) {
@@ -89,6 +134,7 @@ class LocalNetworkSyncServer(
 
     fun stopServer() {
         try {
+            stopPinTimer()
             serverSocket?.close()
             serverSocket = null
             serverJob?.cancel()
@@ -123,70 +169,92 @@ class LocalNetworkSyncServer(
             log("Incoming request: $requestLine from ${clientSocket.inetAddress.hostAddress}")
 
             var contentLength = 0
+            var providedPin = ""
             for (headerLine in lines) {
-                if (headerLine.lowercase().startsWith("content-length:")) {
+                val lower = headerLine.lowercase()
+                if (lower.startsWith("content-length:")) {
                     contentLength = headerLine.substring(15).trim().toIntOrNull() ?: 0
+                } else if (lower.startsWith("x-sync-pin:")) {
+                    providedPin = headerLine.substring(11).trim()
                 }
             }
 
             val myDeviceName = deviceIdentityService.getDeviceName()
             val myDeviceId = deviceIdentityService.getDeviceId()
+            val currentPin = _serverPin.value
 
             if (requestLine.startsWith("GET /info")) {
                 val responseJson = JSONObject().apply {
                     put("status", "ok")
                     put("deviceName", myDeviceName)
                     put("deviceId", myDeviceId)
+                    put("pinRequired", true)
                     put("timestamp", System.currentTimeMillis())
                 }
                 val body = responseJson.toString()
                 sendHttpResponse(outStream, 200, "OK", "application/json", body)
-                log("Replied to /info")
-            } else if (requestLine.startsWith("GET /export")) {
-                val jsonSnapshot = repository.exportToJsonString(deviceId = myDeviceId, deviceName = myDeviceName)
-                sendHttpResponse(outStream, 200, "OK", "application/json", jsonSnapshot)
-                log("Sent full snapshot export (${jsonSnapshot.length} bytes)")
-            } else if (requestLine.startsWith("POST /sync")) {
-                val bodyBytes: ByteArray
-                if (contentLength > 0) {
-                    bodyBytes = ByteArray(contentLength)
-                    var readTotal = 0
-                    while (readTotal < contentLength) {
-                        val count = inStream.read(bodyBytes, readTotal, contentLength - readTotal)
-                        if (count == -1) break
-                        readTotal += count
+                log("Replied to /info (PIN protected)")
+            } else if (requestLine.startsWith("GET /export") || requestLine.startsWith("POST /sync")) {
+                // Verify security PIN
+                if (providedPin.isBlank() || providedPin != currentPin) {
+                    log("❌ Blocked unauthorized sync attempt from ${clientSocket.inetAddress.hostAddress} (Invalid or missing PIN: '${if (providedPin.isBlank()) "<none>" else providedPin.take(2) + "****"}')")
+                    val errorJson = JSONObject().apply {
+                        put("status", "error")
+                        put("code", "INVALID_PIN")
+                        put("message", "Invalid security PIN. Please enter the 6-digit PIN shown on the host device.")
                     }
+                    sendHttpResponse(outStream, 401, "Unauthorized", "application/json", errorJson.toString())
+                    return@withContext
+                }
+
+                log("🔑 PIN verified successfully! Authorizing 2-way sync with ${clientSocket.inetAddress.hostAddress}")
+
+                if (requestLine.startsWith("GET /export")) {
+                    val jsonSnapshot = repository.exportToJsonString(deviceId = myDeviceId, deviceName = myDeviceName)
+                    sendHttpResponse(outStream, 200, "OK", "application/json", jsonSnapshot)
+                    log("Sent full snapshot export (${jsonSnapshot.length} bytes)")
                 } else {
-                    bodyBytes = inStream.readBytes()
-                }
+                    val bodyBytes: ByteArray
+                    if (contentLength > 0) {
+                        bodyBytes = ByteArray(contentLength)
+                        var readTotal = 0
+                        while (readTotal < contentLength) {
+                            val count = inStream.read(bodyBytes, readTotal, contentLength - readTotal)
+                            if (count == -1) break
+                            readTotal += count
+                        }
+                    } else {
+                        bodyBytes = inStream.readBytes()
+                    }
 
-                val requestBody = String(bodyBytes, Charsets.UTF_8)
-                val remoteSnapshot = repository.parseSnapshotFromJson(requestBody)
-                val mergedCount = repository.mergeSnapshot(remoteSnapshot)
+                    val requestBody = String(bodyBytes, Charsets.UTF_8)
+                    val remoteSnapshot = repository.parseSnapshotFromJson(requestBody)
+                    val mergedCount = repository.mergeSnapshot(remoteSnapshot)
 
-                val peerDeviceId = remoteSnapshot.deviceId
-                val peerDeviceName = remoteSnapshot.deviceName.ifBlank { "Remote Device" }
+                    val peerDeviceId = remoteSnapshot.deviceId
+                    val peerDeviceName = remoteSnapshot.deviceName.ifBlank { "Remote Device" }
 
-                // Record peer device last sync timestamp and record count
-                if (peerDeviceId.isNotBlank()) {
-                    deviceIdentityService.recordSyncEvent(
-                        peerDeviceId = peerDeviceId,
-                        peerDeviceName = peerDeviceName,
-                        timestamp = System.currentTimeMillis(),
-                        recordCount = mergedCount
+                    // Record peer device last sync timestamp and record count
+                    if (peerDeviceId.isNotBlank()) {
+                        deviceIdentityService.recordSyncEvent(
+                            peerDeviceId = peerDeviceId,
+                            peerDeviceName = peerDeviceName,
+                            timestamp = System.currentTimeMillis(),
+                            recordCount = mergedCount
+                        )
+                    }
+
+                    log("2-Way Sync: Received & merged $mergedCount records from '$peerDeviceName' ($peerDeviceId)")
+
+                    // Return our updated snapshot (delta since peer's requested timestamp, or full if 0)
+                    val currentSnapshotJson = repository.exportToJsonString(
+                        deviceId = myDeviceId,
+                        deviceName = myDeviceName,
+                        sinceTimestamp = remoteSnapshot.sinceTimestamp
                     )
+                    sendHttpResponse(outStream, 200, "OK", "application/json", currentSnapshotJson)
+                    log("Sync handshake completed successfully with '$peerDeviceName'!")
                 }
-
-                log("2-Way Sync: Received & merged $mergedCount records from '$peerDeviceName' ($peerDeviceId)")
-
-                // Return our updated snapshot (delta since peer's requested timestamp, or full if 0)
-                val currentSnapshotJson = repository.exportToJsonString(
-                    deviceId = myDeviceId,
-                    deviceName = myDeviceName,
-                    sinceTimestamp = remoteSnapshot.sinceTimestamp
-                )
-                sendHttpResponse(outStream, 200, "OK", "application/json", currentSnapshotJson)
-                log("Sync handshake completed successfully with '$peerDeviceName'!")
             } else {
                 sendHttpResponse(outStream, 404, "Not Found", "text/plain", "Not Found")
             }
@@ -216,6 +284,8 @@ class LocalNetworkSyncServer(
     }
 
     companion object {
+        const val PIN_EXPIRY_SECONDS = 30
+
         fun getDeviceLocalIpAddress(context: Context): String {
             try {
                 val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
@@ -255,6 +325,11 @@ class LocalNetworkSyncServer(
                 }
             } catch (_: Exception) {}
             return "127.0.0.1"
+        }
+
+        fun generateRandomPin(): String {
+            val randomDigits = (100000..999999).random()
+            return String.format(java.util.Locale.US, "%06d", randomDigits)
         }
     }
 }

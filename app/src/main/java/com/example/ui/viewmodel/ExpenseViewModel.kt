@@ -531,6 +531,8 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
 
     // Sync Server & Client states
     val serverState: StateFlow<ServerState> = syncServer.serverState
+    val serverPin: StateFlow<String> = syncServer.serverPin
+    val serverPinRemainingSeconds: StateFlow<Int> = syncServer.pinSecondsRemaining
     val serverLogs: StateFlow<List<String>> = syncServer.serverLogs
     val clientSyncState: StateFlow<ClientSyncState> = syncClient.syncState
     val clientLogs: StateFlow<List<String>> = syncClient.clientLogs
@@ -882,12 +884,16 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         syncServer.stopServer()
     }
 
-    fun syncWithPeer(hostAddressWithPort: String, forceFullSync: Boolean = false) {
+    fun regenerateServerPin(): String {
+        return syncServer.regeneratePin()
+    }
+
+    fun syncWithPeer(hostAddressWithPort: String, pin: String = "", forceFullSync: Boolean = false) {
         val parts = hostAddressWithPort.trim().split(":")
         val host = parts[0]
         val port = if (parts.size > 1) parts[1].toIntOrNull() ?: 8890 else 8890
         viewModelScope.launch {
-            syncClient.syncWithHost(host, port, forceFullSync)
+            syncClient.syncWithHost(host, port, pin, forceFullSync)
         }
     }
 

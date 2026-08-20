@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -74,6 +75,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -132,6 +134,8 @@ fun SyncBackupScreen(
     val scope = rememberCoroutineScope()
 
     val serverState by viewModel.serverState.collectAsStateWithLifecycle()
+    val serverPin by viewModel.serverPin.collectAsStateWithLifecycle()
+    val serverPinRemainingSeconds by viewModel.serverPinRemainingSeconds.collectAsStateWithLifecycle()
     val serverLogs by viewModel.serverLogs.collectAsStateWithLifecycle()
     val clientSyncState by viewModel.clientSyncState.collectAsStateWithLifecycle()
     val clientLogs by viewModel.clientLogs.collectAsStateWithLifecycle()
@@ -143,6 +147,7 @@ fun SyncBackupScreen(
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Local Network Sync, 1: File Backup/Restore, 2: Settings
 
     var targetHostIp by remember { mutableStateOf("") }
+    var targetSyncPin by remember { mutableStateOf("") }
     var forceFullSync by remember { mutableStateOf(false) }
     var editDeviceNameDialogVisible by remember { mutableStateOf(false) }
     var editDeviceNameInput by remember { mutableStateOf("") }
@@ -526,6 +531,136 @@ fun SyncBackupScreen(
                                         }
                                     }
 
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // Security Sync PIN Card
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f))
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(12.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Lock,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = "Security Sync PIN",
+                                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                                        color = MaterialTheme.colorScheme.primary
+                                                    )
+                                                }
+
+                                                Row {
+                                                    IconButton(
+                                                        onClick = {
+                                                            val newPin = viewModel.regenerateServerPin()
+                                                            Toast.makeText(context, "New PIN generated: $newPin", Toast.LENGTH_SHORT).show()
+                                                        },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.Refresh, contentDescription = "Regenerate PIN", modifier = Modifier.size(18.dp))
+                                                    }
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    IconButton(
+                                                        onClick = { copyToClipboard(serverPin, "Security Sync PIN") },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(Icons.Default.ContentCopy, contentDescription = "Copy PIN", modifier = Modifier.size(18.dp))
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(4.dp))
+
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = serverPin.ifBlank { "------" },
+                                                    style = MaterialTheme.typography.headlineMedium.copy(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        letterSpacing = 6.sp
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+
+                                                // Countdown Badge
+                                                Surface(
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = if (serverPinRemainingSeconds <= 5)
+                                                        ExpenseRed.copy(alpha = 0.15f)
+                                                    else
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        if (serverPinRemainingSeconds <= 5) ExpenseRed.copy(alpha = 0.4f)
+                                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    )
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Refresh,
+                                                            contentDescription = null,
+                                                            tint = if (serverPinRemainingSeconds <= 5) ExpenseRed else MaterialTheme.colorScheme.primary,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                        Text(
+                                                            text = "${serverPinRemainingSeconds}s",
+                                                            style = MaterialTheme.typography.labelSmall.copy(
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                fontFamily = FontFamily.Monospace
+                                                            ),
+                                                            color = if (serverPinRemainingSeconds <= 5) ExpenseRed else MaterialTheme.colorScheme.primary
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            Spacer(modifier = Modifier.height(6.dp))
+
+                                            // Progress Bar for 30s expiration
+                                            val progress = (serverPinRemainingSeconds.toFloat() / 30f).coerceIn(0f, 1f)
+                                            LinearProgressIndicator(
+                                                progress = { progress },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(4.dp),
+                                                color = if (serverPinRemainingSeconds <= 5) ExpenseRed else MaterialTheme.colorScheme.primary,
+                                                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                            )
+
+                                            Spacer(modifier = Modifier.height(6.dp))
+
+                                            Text(
+                                                text = "🔒 Security PIN auto-refreshes every 30 seconds to protect unattended connections. Enter on connecting device.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
                                     Spacer(modifier = Modifier.height(12.dp))
 
                                     Button(
@@ -571,7 +706,7 @@ fun SyncBackupScreen(
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Enter the Sync Address shown on your other device",
+                                    text = "Enter the Sync Address and Security PIN shown on the other device",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -602,6 +737,44 @@ fun SyncBackupScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .testTag("target_sync_ip_input"),
+                                    shape = RoundedCornerShape(14.dp)
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                OutlinedTextField(
+                                    value = targetSyncPin,
+                                    onValueChange = { input ->
+                                        if (input.length <= 8) {
+                                            targetSyncPin = input.filter { it.isDigit() }
+                                        }
+                                    },
+                                    label = { Text("Security Sync PIN (6 digits)") },
+                                    placeholder = { Text("Enter PIN from Host device") },
+                                    leadingIcon = { Icon(Icons.Default.Lock, contentDescription = null) },
+                                    trailingIcon = {
+                                        IconButton(
+                                            onClick = {
+                                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                                val clipText = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                                val digits = clipText.filter { it.isDigit() }
+                                                if (digits.isNotBlank()) {
+                                                    targetSyncPin = digits.take(8)
+                                                    Toast.makeText(context, "PIN pasted from clipboard", Toast.LENGTH_SHORT).show()
+                                                }
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste PIN")
+                                        }
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Number,
+                                        imeAction = ImeAction.Done
+                                    ),
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("target_sync_pin_input"),
                                     shape = RoundedCornerShape(14.dp)
                                 )
 
@@ -645,11 +818,15 @@ fun SyncBackupScreen(
 
                                 Button(
                                     onClick = {
-                                        if (targetHostIp.isNotBlank()) {
-                                            viewModel.syncWithPeer(targetHostIp, forceFullSync = forceFullSync)
+                                        if (targetHostIp.isBlank()) {
+                                            Toast.makeText(context, "Please enter the host device IP & port", Toast.LENGTH_SHORT).show()
+                                        } else if (targetSyncPin.trim().length < 4) {
+                                            Toast.makeText(context, "Please enter the 6-digit Security PIN from the host device", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            viewModel.syncWithPeer(targetHostIp, pin = targetSyncPin.trim(), forceFullSync = forceFullSync)
                                         }
                                     },
-                                    enabled = targetHostIp.isNotBlank() && clientSyncState !is ClientSyncState.Connecting,
+                                    enabled = targetHostIp.isNotBlank() && targetSyncPin.length >= 4 && clientSyncState !is ClientSyncState.Connecting,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(48.dp)
