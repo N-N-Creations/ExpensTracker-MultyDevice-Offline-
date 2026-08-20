@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Outer Wallet Card Shape -->
+    <path
+        android:fillColor="#1E293B"
+        android:pathData="M30,34 h48 c4.4,0 8,3.6 8,8 v28 c0,4.4 -3.6,8 -8,8 H30 c-4.4,0 -8,-3.6 -8,-8 V42 c0,-4.4 3.6,-8 8,-8 Z" />
+
+    <!-- Wallet Front Flap -->
+    <path
+        android:fillColor="#334155"
+        android:pathData="M22,46 h64 v24 c0,4.4 -3.6,8 -8,8 H30 c-4.4,0 -8,-3.6 -8,-8 Z" />
+
+    <!-- Clasp / Lock Badge -->
+    <path
+        android:fillColor="#10B981"
+        android:pathData="M64,52 h16 c2.2,0 4,1.8 4,4 v8 c0,2.2 -1.8,4 -4,4 H64 c-2.2,0 -4,-1.8 -4,-4 v-8 c0,-2.2 1.8,-4 4,-4 Z" />
+
+    <!-- Gold Coin in clasp -->
+    <path
+        android:fillColor="#FBBF24"
+        android:pathData="M72,60m-3,0a3,3 0,1 1,6 0a3,3 0,1 1,-6 0" />
+
+    <!-- Upward Trend Green Arrow (Income) -->
+    <path
+        android:fillColor="#34D399"
+        android:pathData="M32,58 L42,48 L48,54 L56,44 L56,49 L58,49 L58,41 L50,41 L50,43 L54.5,43 L48,51 L42,45 L30.5,56.5 Z" />
+
+    <!-- Dynamic Currency Symbol Bar -->
+    <path
+        android:fillColor="#E2E8F0"
+        android:pathData="M34,66 h18 v2.5 h-18 z" />
+</vector>

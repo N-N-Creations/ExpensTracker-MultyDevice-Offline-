@@ -1,0 +1,6 @@
+{
+  "name": "Expense Tracker",
+  "description": "Offline-first daily expense and income tracker with bank management, Tabby/Tamara reserved payments, visual charts, budget alerts, and local device sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
