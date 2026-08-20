@@ -34,7 +34,6 @@
   - [Prerequisites](#prerequisites)
   - [Build and Run](#build-and-run)
 - [🔒 Privacy & Security Manifesto](#-privacy--security-manifesto)
-- [🤝 Contributing](#-contributing)
 - [📄 License](#-license)
 
 ---
@@ -185,17 +184,6 @@ app/
 > - 🔐 **Local Network Sync**: Direct peer-to-peer communication that never leaves your local Wi-Fi or hotspot.
 > - 🔑 **30-Second Expiring PIN**: Zero unauthorized access on local networks through auto-rotating security keys.
 > - 🛡️ **Accidental Wipe Protection**: GitHub-style type-to-confirm challenge codes preventing unintended data deletion.
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! If you'd like to improve the app:
-1. Fork the repository.
-2. Create a feature branch (`git checkout -b feature/amazing-feature`).
-3. Commit your changes (`git commit -m 'feat: add amazing feature'`).
-4. Push to the branch (`git push origin feature/amazing-feature`).
-5. Open a Pull Request.
 
 ---
 
