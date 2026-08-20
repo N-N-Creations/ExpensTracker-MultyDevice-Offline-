@@ -1,39 +1,44 @@
-# 🚀 Release Notes
+# 🚀 Release Notes — Version 1.0.0
 
-## Version 2.2.0 (Latest) — 🔒 Enhanced Security, Rotating P2P PIN & Safe Data Management
+### 🔒 Complete Financial Ledger with Local P2P Sync & 30s Rotating PIN Security
 
-### 🌟 What's New & Highlights
-
-#### 1. 🔑 30-Second Rotating Security Sync PIN (Two-Way P2P Sync)
-- **Peer-to-Peer 2-Way Security Protection**: Syncing between Device A and Device B now requires entering a randomly generated **6-Digit Security PIN** (`X-Sync-Pin`) displayed on the host machine before any data can be read or merged.
-- **30-Second Auto-Expiring Rotation**: The security PIN automatically rotates every 30 seconds to safeguard unattended sync sessions and prevent unauthorized connections on shared local Wi-Fi networks.
-- **Live Visual Countdown & Progress Indicator**: Displays an animated M3 progress indicator and real-time seconds badge (`30s` down to `1s` with a red warning in the final 5 seconds), alongside a manual PIN regeneration tool.
-- **Unauthorized Request Blocking**: Sync requests without a valid or matching active PIN are immediately rejected with an HTTP 401 Unauthorized response.
-
-#### 2. 🛡️ GitHub-Style Data Wipe Verification (Danger Zone)
-- **Zero Dummy Data Initialization**: New app installations start completely clean with zero pre-seeded mock transactions, accounts, or commitments.
-- **Type-To-Confirm Challenge Verification**: Data wipe and reset operations now generate dynamic security tokens (e.g. `DELETE-9B2K7`, `PURGE-3F8M1`, `RESET-8X2Q9`) that require manual, case-sensitive character entry to confirm.
-- **Granular Data Removal**: Checkboxes allow you to selectively wipe individual components (Transactions, Bank Accounts, BNPL / Reserved Obligations, Monthly Budgets, Cash Denominations) or execute a complete Factory Reset.
+Welcome to **Version 1.0.0** of Expense Tracker! This release delivers an all-in-one, 100% offline-first financial ledger featuring direct local peer-to-peer sync, dynamic PIN security, cash denomination counting, and BNPL commitment tracking.
 
 ---
 
-## Version 2.1.0 — 🔄 Local Peer-to-Peer Sync Engine & Reconciliation
-- **Local Network Sync**: Direct socket communication over Wi-Fi / Hotspot without any cloud servers or third-party databases.
-- **Fast Delta Syncing**: High-speed incremental merging using per-device timestamp watermarks.
-- **Smart Denomination Reconciliation**: 3-tier intelligent reconciliation algorithm for physical cash counts across devices.
-- **Detailed Sync Logs**: Real-time diagnostic logging panel tracking payload transfers and handshake events.
+### 🌟 Key Features & Capabilities
+
+#### 1. 🔄 Local Peer-to-Peer Sync with 30s Rotating Security PIN
+- **Zero-Cloud P2P Sync**: Synchronize records directly between your devices over local Wi-Fi or mobile personal hotspot without any cloud servers or third-party databases.
+- **30-Second Auto-Expiring Security PIN**: The host device generates a random 6-digit PIN that automatically rotates every 30 seconds to safeguard unattended sync sessions and prevent unauthorized access on shared networks.
+- **Live Visual Countdown & Progress Bar**: Real-time visual progress bar and seconds counter (`30s` down to `1s` with a red warning state), with manual PIN refresh and copy tools.
+- **Unauthorized Connection Blocking**: Connection requests without a valid or matching active PIN are immediately rejected with HTTP 401 Unauthorized.
+- **Conflict-Free Two-Way Merge**: High-speed incremental merging using per-device timestamp watermarks and smart physical cash reconciliation.
+
+#### 2. 🛡️ Danger Zone & GitHub-Style Data Wipe Verification
+- **Zero Dummy Data Initialization**: Fresh app installations start 100% clean with zero pre-seeded dummy records.
+- **Type-To-Confirm Challenge**: Reset operations generate dynamic alphanumeric security tokens (e.g. `DELETE-9B2K7`, `PURGE-3F8M1`, `RESET-8X2Q9`) requiring exact case-sensitive keyboard confirmation.
+- **Granular Reset**: Selectively wipe specific tables (Transactions, Bank Accounts, BNPL Commitments, Budgets, Cash Denominations) or perform a complete Factory Reset.
+
+#### 3. 🏦 Bank Accounts & Physical Cash Denomination Counter
+- **Multi-Account Management**: Track checking, savings, and physical cash wallets with balance adjustments and internal account transfers.
+- **Cash Denomination Counter**: Count physical banknotes and coins (500, 200, 100, 50, 20, 10, 5, 2, 1) with custom denomination support and one-tap clipboard copying.
+
+#### 4. 🛍️ BNPL & Reserved Commitments
+- **Installment Tracking**: Manage Tabby, Tamara, credit commitments, and recurring bills with remaining balance calculations and due date alerts.
+
+#### 5. 🎯 Budget Planning & Financial Analytics
+- **Safe Daily Spend Gauge**: Dynamic calculation of allowable daily expenditure based on monthly budget ceilings.
+- **Visual Breakdown**: Interactive category charts, monthly trend comparisons, and financial health summaries.
+
+#### 6. 💱 Multi-Currency & Data Portability
+- **Global Currencies**: Full support for SAR, AED, USD, EUR, GBP, KWD, BHD, OMR, QAR, EGP, and custom symbols.
+- **JSON & CSV Export**: One-tap full database backup/restore and clean CSV spreadsheet exports.
 
 ---
 
-## Version 2.0.0 — 💵 Cash Denomination Counter & BNPL Management
-- **Banknote & Coin Counter**: Denomination counter supporting 500, 200, 100, 50, 20, 10, 5, 2, and 1 bills with custom denomination addition.
-- **Buy-Now-Pay-Later (Tabby & Tamara)**: Installment schedule tracking, remaining balances, and auto-debit reminders.
-- **Safe Daily Spend Gauge**: Dynamic calculation of daily spending limits based on budget ceilings and days remaining.
-
----
-
-## Version 1.0.0 — Initial Release
-- Core income and expense logging with category breakdowns.
-- Multiple bank account profiles and internal fund transfers.
-- Offline-first Room SQLite architecture.
-- JSON backup & CSV spreadsheet export.
+### 📦 APK Build Information
+- **Version**: `1.0.0`
+- **Version Code**: `1`
+- **Target OS**: Android 8.0+ (API level 26+)
+- **Architecture**: 100% Offline-First (Room SQLite & Local Socket Sync)
