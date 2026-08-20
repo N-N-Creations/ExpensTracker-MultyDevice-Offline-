@@ -842,7 +842,25 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
         return toItem.convertFromSar(amountInSar)
     }
 
-    // --- Action: Clear All Transactions & Reserved Payments ---
+    // --- Action: Wipe Data & Clear Transactions ---
+    fun wipeSelectedData(
+        wipeTransactions: Boolean,
+        wipeBanks: Boolean,
+        wipeBudgets: Boolean,
+        wipeReserved: Boolean,
+        resetDenominations: Boolean
+    ) {
+        viewModelScope.launch {
+            repository.wipeSelectedData(
+                wipeTransactions = wipeTransactions,
+                wipeBanks = wipeBanks,
+                wipeBudgets = wipeBudgets,
+                wipeReserved = wipeReserved,
+                resetDenominations = resetDenominations
+            )
+        }
+    }
+
     fun clearAllTransactions(includeReservedPayments: Boolean = true) {
         viewModelScope.launch {
             repository.clearAllTransactions(includeReservedPayments)

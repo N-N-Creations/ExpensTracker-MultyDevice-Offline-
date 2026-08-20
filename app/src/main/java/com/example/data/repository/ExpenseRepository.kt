@@ -922,90 +922,32 @@ class ExpenseRepository(
         val hasInitialized = prefs?.getBoolean("has_completed_initial_seed", false) ?: false
         if (hasInitialized) return@withContext
 
-        val existing = transactionDao.getAllTransactionsSnapshot()
-        val existingBanks = bankAccountDao.getAllActiveBankAccounts().firstOrNull() ?: emptyList()
-        if (existing.isNotEmpty() || existingBanks.isNotEmpty()) {
-            prefs?.edit()?.putBoolean("has_completed_initial_seed", true)?.apply()
-            return@withContext
-        }
-
+        // Mark initialization complete with clean database (no dummy data)
         prefs?.edit()?.putBoolean("has_completed_initial_seed", true)?.apply()
+    }
 
-        val cal = Calendar.getInstance()
-        val now = System.currentTimeMillis()
-
-        // Seed default bank accounts
-        val defaultBank1 = BankAccount(
-            id = "bank_rajhi",
-            bankName = "Al Rajhi Bank",
-            accountNumberMasked = "•••• 4128",
-            initialBalance = 4500.0,
-            colorHex = 0xFF1B5E20,
-            iconName = "account_balance"
-        )
-        val defaultBank2 = BankAccount(
-            id = "bank_snb",
-            bankName = "SNB (Saudi National Bank)",
-            accountNumberMasked = "•••• 8902",
-            initialBalance = 1800.0,
-            colorHex = 0xFF0D47A1,
-            iconName = "account_balance"
-        )
-        bankAccountDao.insertOrUpdate(defaultBank1)
-        bankAccountDao.insertOrUpdate(defaultBank2)
-
-        // Seed Tabby / Tamara Reserved Installment payments
-        val dueCalendar1 = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_MONTH, 5) // due in 5 days
-            set(Calendar.HOUR_OF_DAY, 10)
-            set(Calendar.MINUTE, 0)
+    suspend fun wipeSelectedData(
+        wipeTransactions: Boolean,
+        wipeBanks: Boolean,
+        wipeBudgets: Boolean,
+        wipeReserved: Boolean,
+        resetDenominations: Boolean
+    ) = withContext(Dispatchers.IO) {
+        if (wipeTransactions) {
+            transactionDao.clearAll()
         }
-        val dueCalendar2 = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_MONTH, 18) // due in 18 days
-            set(Calendar.HOUR_OF_DAY, 14)
-            set(Calendar.MINUTE, 30)
+        if (wipeBanks) {
+            bankAccountDao.deleteAll()
         }
-
-        val reserved1 = ReservedPayment(
-            id = "res_tabby_iphone",
-            title = "Tabby - Electronics BNPL (2/4)",
-            amount = 175.00,
-            dueDate = dueCalendar1.timeInMillis,
-            category = "Tabby / Tamara (BNPL)",
-            accountSourceType = AccountSourceType.BANK,
-            bankAccountId = defaultBank1.id,
-            bankAccountName = defaultBank1.bankName,
-            frequency = RecurringFrequency.MONTHLY,
-            reminderDaysBefore = 3,
-            note = "Ensure Al Rajhi account has minimum $175 balance before auto-debit"
-        )
-
-        val reserved2 = ReservedPayment(
-            id = "res_tamara_noon",
-            title = "Tamara - Home Essentials (3/3)",
-            amount = 89.50,
-            dueDate = dueCalendar2.timeInMillis,
-            category = "Tabby / Tamara (BNPL)",
-            accountSourceType = AccountSourceType.BANK,
-            bankAccountId = defaultBank2.id,
-            bankAccountName = defaultBank2.bankName,
-            frequency = RecurringFrequency.MONTHLY,
-            reminderDaysBefore = 2,
-            note = "Final installment for Noon home order"
-        )
-
-        reservedPaymentDao.insertOrUpdate(reserved1)
-        reservedPaymentDao.insertOrUpdate(reserved2)
-
-        // Current Month default budget
-        val monthYearKey = SimpleDateFormat("yyyy-MM", Locale.getDefault()).format(Date(now))
-        budgetDao.upsertBudget(
-            MonthlyBudget(
-                monthYear = monthYearKey,
-                totalLimit = 5000.0,
-                alertThresholdPercent = 80
-            )
-        )
+        if (wipeBudgets) {
+            budgetDao.clearAll()
+        }
+        if (wipeReserved) {
+            reservedPaymentDao.deleteAll()
+        }
+        if (resetDenominations) {
+            resetAllDenominations()
+        }
     }
 
     suspend fun clearAllTransactions(includeReservedPayments: Boolean = true) = withContext(Dispatchers.IO) {

@@ -1,94 +1,193 @@
-# Expense Tracker 💰
+# 💰 Expense Tracker
 
-An **offline-first, privacy-focused personal finance manager** built natively for Android using Kotlin and Jetpack Compose. Effortlessly track daily expenses and income, manage bank accounts and cash on hand, monitor Tabby/Tamara BNPL installments, calculate cash denominations, and synchronize data between devices over local Wi-Fi or hotspot without cloud servers.
+<p align="center">
+  <img src="https://img.shields.io/badge/Platform-Android-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Platform: Android" />
+  <img src="https://img.shields.io/badge/Language-Kotlin_2.0-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white" alt="Language: Kotlin" />
+  <img src="https://img.shields.io/badge/UI-Jetpack_Compose_M3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white" alt="UI: Jetpack Compose" />
+  <img src="https://img.shields.io/badge/Database-Room_SQLite-FFA000?style=for-the-badge&logo=sqlite&logoColor=white" alt="Database: Room SQLite" />
+  <img src="https://img.shields.io/badge/Architecture-MVVM_Clean-00C853?style=for-the-badge" alt="Architecture: MVVM" />
+  <img src="https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge" alt="License: MIT" />
+</p>
+
+<p align="center">
+  <b>A private, offline-first personal finance and cash management app for Android.</b><br>
+  Track daily income & expenses, balance bank accounts and physical cash, manage Tabby/Tamara BNPL installments, count banknotes with physical cash denomination sheets, and synchronize multiple devices over local Wi-Fi/Hotspot without any cloud servers.
+</p>
+
+---
+
+## 📑 Table of Contents
+
+- [✨ Key Features](#-key-features)
+  - [1. 📊 Expense & Income Tracking](#1--expense--income-tracking)
+  - [2. 🏦 Bank Accounts & Cash Management](#2--bank-accounts--cash-management)
+  - [3. 🛍️ BNPL & Reserved Commitments](#3-️-bnpl--reserved-commitments-tabby--tamara--bills)
+  - [4. 💵 Physical Cash Denomination Counter](#4--physical-cash-denomination-counter)
+  - [5. 🔄 Local Peer-to-Peer Device Sync](#5--local-peer-to-peer-device-sync-no-cloud-needed)
+  - [6. 📈 Financial Analytics & Visual Reports](#6--financial-analytics--visual-reports)
+  - [7. 🎯 Budget Planning & Safe Daily Spend](#7--budget-planning--safe-daily-spend)
+  - [8. 💱 Multi-Currency & Data Portability](#8--multi-currency--data-portability)
+- [🛠️ Architecture & Tech Stack](#️-architecture--tech-stack)
+- [⚙️ Technical Specifications](#️-technical-specifications)
+- [📱 Getting Started](#-getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Build and Run](#build-and-run)
+- [🔒 Privacy & Security Manifesto](#-privacy--security-manifesto)
+- [🤝 Contributing](#-contributing)
+- [📄 License](#-license)
 
 ---
 
 ## ✨ Key Features
 
 ### 1. 📊 Expense & Income Tracking
-- **Quick Logging**: Add expenses and income with custom categories, payment methods (Cash, Card, Bank Transfer, BNPL), notes, and timestamps.
-- **Dynamic Period Filtering**: Filter your finances by Today, Yesterday, This Week, This Month, This Year, or a Custom Date Range.
-- **Search & Quick Categories**: Instantly search transactions by note, category, or amount.
+- **Rapid Transaction Entry**: Log transactions with amounts, categories, customizable timestamps, payment methods (Cash, Card, Bank Transfer, BNPL), and notes.
+- **Dynamic Time Filters**: Switch between **Today**, **Yesterday**, **This Week**, **This Month**, **This Year**, or define a **Custom Date Range**.
+- **Instant Search & Category Pills**: Find records by keyword, notes, category, or amount with live result counters.
 
 ### 2. 🏦 Bank Accounts & Cash Management
-- **Multiple Bank Accounts**: Add, edit, or archive multiple bank accounts with initial balances, masked account numbers, and custom color tags.
-- **Account Transfers**: Record seamless internal fund transfers between Cash on Hand and Bank Accounts, or between separate Bank Accounts.
-- **Live Account Reconciliation**: Balances update dynamically based on recorded income, expenses, and pending commitments.
+- **Multiple Bank Profiles**: Track separate bank accounts with custom color badges, masked account numbers, and starting balances.
+- **Internal Fund Transfers**: Move funds between *Cash on Hand* and *Bank Accounts*, or perform inter-bank transfers with automatic dual-entry ledger logging.
+- **Live Reconciliation**: Balances update in real time based on transactions, transfers, and committed reserve payments.
 
 ### 3. 🛍️ BNPL & Reserved Commitments (Tabby / Tamara / Bills)
-- **Installment Tracking**: Manage Buy-Now-Pay-Later (BNPL) plans like Tabby and Tamara with automated installment schedules (e.g., installment 2 of 4).
-- **Auto-Debit Reminders**: Alerts when an upcoming installment is due or when a linked bank account has insufficient balance to cover the payment.
-- **Committed Budget Integration**: Pending reserved payments are factored into your monthly budget calculations to prevent overspending.
+- **Installment Tracking**: Organize Buy-Now-Pay-Later payment plans with automated installment schedules (e.g., installment 2 of 4).
+- **Auto-Debit Reminders & Low-Balance Warnings**: Visual indicators alert you before a payment is due and warn if the linked account has insufficient funds.
+- **Committed Budget Protection**: Pending commitments are automatically deducted from your available disposable budget to avoid overspending.
 
-### 4. 💵 Cash Denomination Counter & Calculator
-- **Physical Cash Tracker**: Count banknotes and coins (500, 200, 100, 50, 20, 10, 5, 2, 1) with instant total and piece calculations.
-- **Custom Denominations**: Add custom bill or coin values tailored to your currency.
-- **One-Tap Quick Actions**: Copy breakdown summary to clipboard or reset counts.
+### 4. 💵 Physical Cash Denomination Counter
+- **Currency Notes & Coins Breakdown**: Dedicated counter for physical cash (500, 200, 100, 50, 20, 10, 5, 2, 1) with real-time piece and value totals.
+- **Custom Denominations**: Add or customize banknotes and coins to match any regional currency.
+- **One-Tap Clipboard Copy**: Share or save formatted denomination summaries instantly.
 
-### 5. 🔄 Local Peer-to-Peer Device Sync (No Cloud Required)
-- **Direct LAN & Hotspot Sync**: Sync financial records between two or more Android devices on the same Wi-Fi network or mobile hotspot.
-- **Duplicate-Proof Two-Way Merge**: Unique persistent UUIDs ensure conflict-free syncing with zero duplicate records.
-- **Incremental Fast Sync**: Tracks per-device last synced transaction timestamps for fast delta synchronization.
-- **Device Origin Tags**: Every transaction displays which device originally created it (e.g., `Pixel 8`, `Galaxy S24`).
-- **Smart Denomination Reconciliation**:
-  - Automatically resolves cash breakdowns by matching the unified merged cash-in-hand total.
-  - Prioritizes exact matches, closest accuracy, and most recent active device timestamps.
+### 5. 🔄 Local Peer-to-Peer Device Sync (No Cloud Needed)
+Sync your ledger across your phone, tablet, and family devices seamlessly over your private network:
+
+```
+┌─────────────────┐       Local Wi-Fi / Hotspot       ┌─────────────────┐
+│ Device A (Host) │ ◄───────────────────────────────► │ Device B (Peer) │
+│ Embedded Server │     Encrypted Local Payload       │ Socket Client   │
+└─────────────────┘                                   └─────────────────┘
+```
+
+<details>
+<summary><b>Click to expand P2P Sync Mechanics</b></summary>
+
+- **Zero Cloud Dependency**: Operates entirely over local Wi-Fi or mobile personal hotspot via direct socket communication.
+- **Conflict-Free Two-Way Merge**: Every transaction is assigned an immutable UUID, ensuring duplicate-free reconciliation.
+- **Incremental Fast Delta Sync**: High-speed syncing based on per-device transaction timestamps.
+- **Device Origin Attribution**: Every synced record identifies its originating device (e.g., `Pixel 8`, `Galaxy S24`).
+- **3-Tier Smart Denomination Reconciliation**:
+  1. *Exact Ledger Match*: Adopts the physical cash breakdown matching the new merged cash-in-hand total.
+  2. *Closest Accuracy*: Selects the configuration with the smallest variance against the combined ledger.
+  3. *Timestamp Priority*: Retains the most recently updated count while preserving custom peer denominations.
+</details>
 
 ### 6. 📈 Financial Analytics & Visual Reports
-- **Category Breakdown**: Interactive visual progress bars and percentage distribution for spending and income.
-- **Daily Spend Trends**: Visual spend points tracking daily velocity and peak spending days.
-- **Key Metrics**: Savings rate percentage, net balance, average daily spend, and highest expense day.
+- **Category Spending Breakdown**: Visual distribution bars showing where your money goes.
+- **Daily Spend Trend Charts**: Track spending velocity and identify peak expense days across the month.
+- **Key Financial Metrics**: Real-time savings rate percentage, net balance, average daily expenditure, and monthly projections.
 
 ### 7. 🎯 Budget Planning & Safe Daily Spend
-- **Monthly Limit & Thresholds**: Set a monthly spending ceiling with configurable alert thresholds (e.g., 80% warning).
-- **Safe Daily Spend Indicator**: Calculates how much you can safely spend per remaining day of the month.
-- **Visual Alert Banners**: Color-coded badges indicate whether your budget is Safe, Approaching Limit, or Exceeded.
+- **Monthly Spending Limits**: Set a monthly budget ceiling with configurable alert thresholds (e.g., 80% warning).
+- **Safe Daily Spend Gauge**: Dynamically calculates your safe daily allowance based on remaining funds and days left in the month.
+- **Status Badges**: Clear color-coded alerts (**Safe**, **Approaching Limit**, **Exceeded**).
 
-### 8. 📁 Backup, Restore & CSV Export
-- **Full JSON Backup**: Export and import complete portable backups including transactions, budgets, bank accounts, reserved payments, and denomination counts.
-- **CSV Export**: Export formatted transaction history for analysis in Microsoft Excel, Google Sheets, or Numbers.
+### 8. 💱 Multi-Currency & Data Portability
+- **Currency Manager**: Set primary currency symbols and manage custom exchange rates.
+- **Full JSON Backup & Restore**: Backup and restore your complete database offline with a single tap.
+- **CSV Data Export**: Export clean, standardized CSV files formatted for Microsoft Excel, Google Sheets, or Apple Numbers.
 
 ---
 
 ## 🛠️ Architecture & Tech Stack
 
-- **UI Framework**: [Jetpack Compose](https://developer.android.com/jetpack/compose) with Material Design 3 (M3).
-- **Architecture**: MVVM (Model-View-ViewModel) with Clean Repository Pattern.
-- **Database**: [Room](https://developer.android.com/training/data-storage/room) for robust on-device SQLite persistence via Kotlin Symbol Processing (KSP).
-- **Asynchronous Flow**: Kotlin Coroutines & `StateFlow` for reactive, lifecycle-aware state updates.
-- **Networking**: Embedded lightweight local HTTP/TCP socket server and client for offline LAN sync.
-- **Language**: 100% Kotlin.
+```
+app/
+ ├── data/
+ │    ├── local/         # Room Database, DAOs, Entity definitions
+ │    ├── model/         # Domain models (Transaction, BankAccount, Currency, etc.)
+ │    └── repository/    # ExpenseRepository (Single Source of Truth)
+ ├── ui/
+ │    ├── components/    # Reusable Compose UI components & design system
+ │    ├── screens/       # Main screens (Home, Analytics, Budget, Sync, Dialogs)
+ │    ├── theme/         # Material 3 Color Schemes, Typography, Shapes
+ │    └── viewmodel/     # State management with Kotlin StateFlow & Coroutines
+ └── utils/              # Export helpers, formatters, and network utilities
+```
+
+| Layer | Technology |
+| :--- | :--- |
+| **Language** | Kotlin 2.0+ (100% Coroutines & Flow) |
+| **UI Framework** | Jetpack Compose with Material Design 3 (M3) |
+| **State Management** | Android ViewModel + `StateFlow` + `collectAsStateWithLifecycle` |
+| **Local Persistence** | Room Database with SQLite & KSP (Kotlin Symbol Processing) |
+| **P2P Networking** | Embedded Local HTTP/Socket Server & OkHttp Client |
+| **System Integration** | Android Predictive Back Handler (`WindowInsets.isImeVisible`) |
+
+---
+
+## ⚙️ Technical Specifications
+
+| Specification | Requirement / Detail |
+| :--- | :--- |
+| **Minimum SDK** | Android 8.0 (API Level 26) |
+| **Target SDK** | Android 14 / 15 (API Level 34 / 35) |
+| **JDK Version** | OpenJDK 17 |
+| **Build System** | Gradle (Kotlin DSL - `.gradle.kts`) |
+| **Design System** | Material Design 3 Dynamic Theming (Light & Dark Mode) |
 
 ---
 
 ## 📱 Getting Started
 
 ### Prerequisites
-- Android Studio Ladybug (or newer)
-- Android SDK 34 (Android 14) or higher
-- JDK 17
+- [Android Studio Ladybug (2024.2.1+)](https://developer.android.com/studio) or newer
+- Android SDK 34+
+- Java Development Kit (JDK) 17
 
-### Building from Source
-1. Clone the repository:
+### Build and Run
+1. **Clone the repository:**
    ```bash
    git clone https://github.com/your-username/expense-tracker.git
    cd expense-tracker
    ```
-2. Open the project in **Android Studio**.
-3. Allow Gradle to sync dependencies.
-4. Select your target device or emulator and click **Run** (`Shift + F10`).
+
+2. **Open in Android Studio:**
+   - Select **Open an Existing Project** and navigate to the cloned folder.
+
+3. **Build the APK:**
+   ```bash
+   ./gradlew assembleDebug
+   ```
+
+4. **Run on Device or Emulator:**
+   - Select your connected device and press **`Shift + F10`** (or click the green **Run** button).
 
 ---
 
-## 🔒 Privacy & Security
+## 🔒 Privacy & Security Manifesto
 
-- **100% Offline-First**: Your financial data is stored exclusively on your device.
-- **No Third-Party Tracking**: No telemetry, analytics trackers, or external cloud databases.
-- **Direct P2P Sync**: Data transfer happens strictly between devices on your local private network.
+> [!IMPORTANT]
+> **Your financial data is private and belongs only to you.**
+>
+> - 🛡️ **Zero Cloud Storage**: No remote database servers, accounts, or cloud logins.
+> - 🚫 **Zero Telemetry & Ads**: No analytics SDKs, trackers, or advertising frameworks.
+> - 🔐 **Local Network Sync**: Direct peer-to-peer communication that never leaves your local Wi-Fi or hotspot.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! If you'd like to improve the app:
+1. Fork the repository.
+2. Create a feature branch (`git checkout -b feature/amazing-feature`).
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`).
+4. Push to the branch (`git push origin feature/amazing-feature`).
+5. Open a Pull Request.
 
 ---
 
 ## 📄 License
 
-This project is open source and available under the [MIT License](LICENSE).
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

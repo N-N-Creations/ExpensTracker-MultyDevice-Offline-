@@ -5,20 +5,25 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,15 +32,19 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.CurrencyExchange
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Devices
 import androidx.compose.material.icons.filled.Edit
@@ -87,9 +96,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,7 +115,14 @@ import com.example.ui.theme.WarningYellow
 import com.example.ui.viewmodel.ExpenseViewModel
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+private fun generateWipeChallengeCode(): String {
+    val verbs = listOf("DELETE", "WIPE", "RESET", "PURGE", "ERASE")
+    val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    val suffix = (1..5).map { chars.random() }.joinToString("")
+    return "${verbs.random()}-$suffix"
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SyncBackupScreen(
     viewModel: ExpenseViewModel,
@@ -132,8 +151,14 @@ fun SyncBackupScreen(
     var replaceAllOnImport by remember { mutableStateOf(false) }
     var importResultMessage by remember { mutableStateOf<String?>(null) }
     var currencyManagerVisible by remember { mutableStateOf(false) }
-    var clearTransactionsDialogVisible by remember { mutableStateOf(false) }
-    var clearReservedPaymentsChecked by remember { mutableStateOf(true) }
+    var wipeDataDialogVisible by remember { mutableStateOf(false) }
+    var wipeChallengeCode by remember { mutableStateOf("") }
+    var typedChallengeInput by remember { mutableStateOf("") }
+    var wipeTransactionsChecked by remember { mutableStateOf(true) }
+    var wipeReservedPaymentsChecked by remember { mutableStateOf(true) }
+    var wipeBankAccountsChecked by remember { mutableStateOf(false) }
+    var wipeBudgetsChecked by remember { mutableStateOf(false) }
+    var resetDenominationsChecked by remember { mutableStateOf(false) }
 
     val activeCurrencyCode by viewModel.activeCurrencyCode.collectAsStateWithLifecycle()
 
@@ -1193,7 +1218,7 @@ fun SyncBackupScreen(
                             modifier = Modifier.fillMaxWidth().testTag("clear_transactions_danger_card"),
                             shape = RoundedCornerShape(20.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.3f))
+                            border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.3f))
                         ) {
                             Column(
                                 modifier = Modifier
@@ -1206,7 +1231,7 @@ fun SyncBackupScreen(
                                 ) {
                                     Icon(Icons.Default.Warning, contentDescription = null, tint = ExpenseRed)
                                     Text(
-                                        text = "Data Management",
+                                        text = "Danger Zone: Data Wipe & Reset",
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = ExpenseRed
                                     )
@@ -1215,7 +1240,7 @@ fun SyncBackupScreen(
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 Text(
-                                    text = "Wipe all demo and existing transactions to start completely fresh. Your configured bank accounts, budgets, and recurring schedules will remain safe.",
+                                    text = "Permanently erase transactions, banks, budgets, or reset all data to start clean. Requires GitHub-style typed confirmation code verification.",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -1223,7 +1248,16 @@ fun SyncBackupScreen(
                                 Spacer(modifier = Modifier.height(16.dp))
 
                                 Button(
-                                    onClick = { clearTransactionsDialogVisible = true },
+                                    onClick = {
+                                        wipeChallengeCode = generateWipeChallengeCode()
+                                        typedChallengeInput = ""
+                                        wipeTransactionsChecked = true
+                                        wipeReservedPaymentsChecked = true
+                                        wipeBankAccountsChecked = false
+                                        wipeBudgetsChecked = false
+                                        resetDenominationsChecked = false
+                                        wipeDataDialogVisible = true
+                                    },
                                     colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
                                     shape = RoundedCornerShape(12.dp),
                                     modifier = Modifier
@@ -1231,9 +1265,9 @@ fun SyncBackupScreen(
                                         .height(46.dp)
                                         .testTag("clear_all_transactions_button")
                                 ) {
-                                    Icon(Icons.Default.DeleteSweep, contentDescription = null)
+                                    Icon(Icons.Default.DeleteForever, contentDescription = null)
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Clear All Transactions (Start Fresh)", fontWeight = FontWeight.Bold)
+                                    Text("Wipe / Reset Data (Confirmation Required)", fontWeight = FontWeight.Bold)
                                 }
                             }
                         }
@@ -1251,54 +1285,302 @@ fun SyncBackupScreen(
         )
     }
 
-    // Clear All Transactions Confirmation Dialog
-    if (clearTransactionsDialogVisible) {
+    // GitHub-Style Data Wipe Confirmation Dialog
+    if (wipeDataDialogVisible) {
+        val isImeVisible = WindowInsets.isImeVisible
+        val keyboardController = LocalSoftwareKeyboardController.current
+        val focusManager = LocalFocusManager.current
+
+        BackHandler(enabled = isImeVisible) {
+            keyboardController?.hide()
+            focusManager.clearFocus()
+        }
+
+        val hasAnySelection = wipeTransactionsChecked || wipeReservedPaymentsChecked ||
+                wipeBankAccountsChecked || wipeBudgetsChecked || resetDenominationsChecked
+        val isCodeMatched = typedChallengeInput.trim().equals(wipeChallengeCode, ignoreCase = false)
+
         AlertDialog(
-            onDismissRequest = { clearTransactionsDialogVisible = false },
+            onDismissRequest = { wipeDataDialogVisible = false },
+            modifier = Modifier.padding(vertical = 16.dp),
             icon = {
                 Icon(
-                    Icons.Default.DeleteSweep,
+                    Icons.Default.DeleteForever,
                     contentDescription = null,
                     tint = ExpenseRed,
-                    modifier = Modifier.size(32.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             },
             title = {
                 Text(
-                    text = "Clear All Transactions?",
+                    text = "Permanently Delete Data",
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleLarge
                 )
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    // Warning Banner
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = ExpenseRed.copy(alpha = 0.1f),
+                        border = BorderStroke(1.dp, ExpenseRed.copy(alpha = 0.3f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Icon(
+                                Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = ExpenseRed,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "This action cannot be undone. Selected items will be permanently erased from this device.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Checkbox Selection for what to delete
                     Text(
-                        text = "This will permanently delete all recorded expense & income transaction records so you can start completely fresh. Configured bank accounts and monthly budget settings will remain intact.",
-                        style = MaterialTheme.typography.bodyMedium
+                        text = "Select data to delete:",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
                     )
 
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { clearReservedPaymentsChecked = !clearReservedPaymentsChecked }
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+                            .padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        // All Transactions
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { wipeTransactionsChecked = !wipeTransactionsChecked }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = wipeTransactionsChecked,
+                                onCheckedChange = { wipeTransactionsChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "All Transactions (Expenses & Income)",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Reserved Payments
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { wipeReservedPaymentsChecked = !wipeReservedPaymentsChecked }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = wipeReservedPaymentsChecked,
+                                onCheckedChange = { wipeReservedPaymentsChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Scheduled & BNPL Reserved Payments",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Bank Accounts
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { wipeBankAccountsChecked = !wipeBankAccountsChecked }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = wipeBankAccountsChecked,
+                                onCheckedChange = { wipeBankAccountsChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Configured Bank Accounts",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Budgets
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { wipeBudgetsChecked = !wipeBudgetsChecked }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = wipeBudgetsChecked,
+                                onCheckedChange = { wipeBudgetsChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Monthly Budget Limits",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+
+                        // Denominations
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { resetDenominationsChecked = !resetDenominationsChecked }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = resetDenominationsChecked,
+                                onCheckedChange = { resetDenominationsChecked = it }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Reset Physical Cash Denominations (Zero count)",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Select All / Deselect All Row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        val allSelected = wipeTransactionsChecked && wipeReservedPaymentsChecked &&
+                                wipeBankAccountsChecked && wipeBudgetsChecked && resetDenominationsChecked
+                        TextButton(
+                            onClick = {
+                                val next = !allSelected
+                                wipeTransactionsChecked = next
+                                wipeReservedPaymentsChecked = next
+                                wipeBankAccountsChecked = next
+                                wipeBudgetsChecked = next
+                                resetDenominationsChecked = next
+                            }
+                        ) {
+                            Text(if (allSelected) "Deselect All" else "Select All (Factory Reset)")
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // GitHub-style Verification Challenge Section
+                    Text(
+                        text = "To confirm deletion, type the code below exactly:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    // Code Display Box
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Checkbox(
-                                checked = clearReservedPaymentsChecked,
-                                onCheckedChange = { clearReservedPaymentsChecked = it }
-                            )
                             Text(
-                                text = "Also clear all scheduled / BNPL reserved payments",
-                                style = MaterialTheme.typography.bodySmall,
-                                fontWeight = FontWeight.Medium
+                                text = wipeChallengeCode,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 18.sp,
+                                letterSpacing = 2.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+
+                            IconButton(
+                                onClick = {
+                                    wipeChallengeCode = generateWipeChallengeCode()
+                                    typedChallengeInput = ""
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Generate new code", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    }
+
+                    // Input Text Field
+                    OutlinedTextField(
+                        value = typedChallengeInput,
+                        onValueChange = { typedChallengeInput = it },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("wipe_confirm_input"),
+                        placeholder = { Text("Type $wipeChallengeCode") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        trailingIcon = {
+                            if (typedChallengeInput.isNotEmpty()) {
+                                if (isCodeMatched) {
+                                    Icon(Icons.Default.Check, contentDescription = "Match", tint = IncomeGreen)
+                                } else {
+                                    Icon(Icons.Default.Close, contentDescription = "Mismatch", tint = ExpenseRed)
+                                }
+                            }
+                        },
+                        keyboardOptions = KeyboardOptions(
+                            keyboardType = KeyboardType.Ascii,
+                            imeAction = ImeAction.Done
+                        ),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                keyboardController?.hide()
+                                focusManager.clearFocus()
+                            }
+                        )
+                    )
+
+                    // Helper feedback message
+                    if (typedChallengeInput.isNotEmpty()) {
+                        if (isCodeMatched) {
+                            Text(
+                                text = "✓ Confirmation code matches",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = IncomeGreen
+                            )
+                        } else {
+                            Text(
+                                text = "✕ Code does not match yet (case-sensitive)",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = ExpenseRed
                             )
                         }
                     }
@@ -1307,22 +1589,32 @@ fun SyncBackupScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        viewModel.clearAllTransactions(includeReservedPayments = clearReservedPaymentsChecked)
-                        clearTransactionsDialogVisible = false
-                        val msg = if (clearReservedPaymentsChecked)
-                            "All transactions & reserved obligations cleared!"
-                        else
-                            "All transactions cleared successfully!"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (isCodeMatched && hasAnySelection) {
+                            viewModel.wipeSelectedData(
+                                wipeTransactions = wipeTransactionsChecked,
+                                wipeBanks = wipeBankAccountsChecked,
+                                wipeBudgets = wipeBudgetsChecked,
+                                wipeReserved = wipeReservedPaymentsChecked,
+                                resetDenominations = resetDenominationsChecked
+                            )
+                            wipeDataDialogVisible = false
+                            Toast.makeText(context, "Selected data permanently wiped!", Toast.LENGTH_LONG).show()
+                        }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = ExpenseRed),
-                    shape = RoundedCornerShape(10.dp)
+                    enabled = isCodeMatched && hasAnySelection,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = ExpenseRed,
+                        disabledContainerColor = ExpenseRed.copy(alpha = 0.3f),
+                        disabledContentColor = Color.White.copy(alpha = 0.5f)
+                    ),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.testTag("confirm_wipe_data_button")
                 ) {
-                    Text("Yes, Clear All", fontWeight = FontWeight.Bold)
+                    Text("Permanently Delete", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { clearTransactionsDialogVisible = false }) {
+                TextButton(onClick = { wipeDataDialogVisible = false }) {
                     Text("Cancel")
                 }
             }
