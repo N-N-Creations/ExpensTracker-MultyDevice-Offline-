@@ -179,11 +179,18 @@ data class DeviceSyncRecord(
     val lastRecordCount: Int = 0
 )
 
+data class DeviceDeltaRecord(
+    val delta: Int = 0,
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 data class DenominationItem(
     val value: Double,
     val count: Int = 0,
     val isCustom: Boolean = false,
-    val updatedAt: Long = System.currentTimeMillis()
+    val updatedAt: Long = System.currentTimeMillis(),
+    val baseCount: Int = 0,
+    val deviceDeltas: Map<String, DeviceDeltaRecord> = emptyMap()
 ) {
     val subtotal: Double get() = value * count
 }

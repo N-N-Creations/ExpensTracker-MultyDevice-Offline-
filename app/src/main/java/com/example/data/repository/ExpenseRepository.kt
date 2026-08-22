@@ -284,12 +284,55 @@ class ExpenseRepository(
     }
 
     // --- Data Export & Snapshot (Includes Transactions, Budgets, Bank Accounts, BNPL Reserved Payments & Denominations) ---
-    // Cash Denominations Persistence & Reactive State Flow
+    // Cash Denominations Persistence & Reactive State Flow with Vector Delta (CRDT) Support
     private val denomPrefs = context?.getSharedPreferences("denomination_prefs_v2", Context.MODE_PRIVATE)
     private val defaultDenominationValues = listOf(500.0, 200.0, 100.0, 50.0, 20.0, 10.0, 5.0, 2.0, 1.0)
 
     private val _denominationsFlow = MutableStateFlow<List<DenominationItem>>(loadSavedDenominations())
     val denominationsFlow: StateFlow<List<DenominationItem>> = _denominationsFlow.asStateFlow()
+
+    private fun getEffectiveDeviceId(): String {
+        return try {
+            val devPrefs = context?.getSharedPreferences("expense_device_identity_prefs", Context.MODE_PRIVATE)
+            devPrefs?.getString("device_id", null) ?: "dev_local"
+        } catch (_: Exception) {
+            "dev_local"
+        }
+    }
+
+    private fun serializeDeltas(deltas: Map<String, com.example.data.model.DeviceDeltaRecord>): String {
+        val json = JSONObject()
+        for ((devId, record) in deltas) {
+            val recObj = JSONObject()
+            recObj.put("delta", record.delta)
+            recObj.put("updatedAt", record.updatedAt)
+            json.put(devId, recObj)
+        }
+        return json.toString()
+    }
+
+    private fun deserializeDeltas(jsonStr: String?): Map<String, com.example.data.model.DeviceDeltaRecord> {
+        if (jsonStr.isNullOrBlank()) return emptyMap()
+        val map = mutableMapOf<String, com.example.data.model.DeviceDeltaRecord>()
+        try {
+            val json = JSONObject(jsonStr)
+            val keys = json.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val recObj = json.optJSONObject(key)
+                if (recObj != null) {
+                    map[key] = com.example.data.model.DeviceDeltaRecord(
+                        delta = recObj.optInt("delta", 0),
+                        updatedAt = recObj.optLong("updatedAt", System.currentTimeMillis())
+                    )
+                } else {
+                    val deltaInt = json.optInt(key, 0)
+                    map[key] = com.example.data.model.DeviceDeltaRecord(delta = deltaInt, updatedAt = System.currentTimeMillis())
+                }
+            }
+        } catch (_: Exception) {}
+        return map
+    }
 
     private fun loadSavedDenominations(): List<DenominationItem> {
         val prefs = denomPrefs ?: return defaultDenominationValues.map { DenominationItem(it, 0, false) }
@@ -303,9 +346,26 @@ class ExpenseRepository(
 
         return activeValues.distinct().sortedDescending().map { value ->
             val count = prefs.getInt("count_${value}", 0)
+            val baseCount = prefs.getInt("base_${value}", count)
             val isCustom = !defaultDenominationValues.contains(value)
             val itemUpdated = prefs.getLong("updated_${value}", lastUpdatedAll)
-            DenominationItem(value = value, count = count, isCustom = isCustom, updatedAt = itemUpdated)
+            val deltasStr = prefs.getString("deltas_${value}", null)
+            val deltas = deserializeDeltas(deltasStr)
+
+            val effectiveCount = if (deltas.isNotEmpty()) {
+                (baseCount + deltas.values.sumOf { it.delta }).coerceAtLeast(0)
+            } else {
+                count
+            }
+
+            DenominationItem(
+                value = value,
+                count = effectiveCount,
+                isCustom = isCustom,
+                updatedAt = itemUpdated,
+                baseCount = baseCount,
+                deviceDeltas = deltas
+            )
         }
     }
 
@@ -320,43 +380,92 @@ class ExpenseRepository(
         editor.putLong("denoms_last_updated", now)
         items.forEach { item ->
             editor.putInt("count_${item.value}", item.count)
+            editor.putInt("base_${item.value}", item.baseCount)
             editor.putLong("updated_${item.value}", if (item.updatedAt > 0) item.updatedAt else now)
+            editor.putString("deltas_${item.value}", serializeDeltas(item.deviceDeltas))
         }
         editor.apply()
         _denominationsFlow.value = items
     }
 
-    fun updateDenominationCount(value: Double, newCount: Int) {
+    fun updateDenominationCount(value: Double, newCount: Int, deviceId: String = "") {
+        val devId = if (deviceId.isNotBlank()) deviceId else getEffectiveDeviceId()
         val clamped = newCount.coerceAtLeast(0)
         val current = _denominationsFlow.value.toMutableList()
         val index = current.indexOfFirst { it.value == value }
         if (index != -1) {
-            current[index] = current[index].copy(count = clamped, updatedAt = System.currentTimeMillis())
+            val item = current[index]
+            val now = System.currentTimeMillis()
+            val otherDeltasSum = item.deviceDeltas.filterKeys { it != devId }.values.sumOf { it.delta }
+            val myNewDelta = clamped - item.baseCount - otherDeltasSum
+
+            val updatedDeltas = item.deviceDeltas.toMutableMap()
+            updatedDeltas[devId] = com.example.data.model.DeviceDeltaRecord(delta = myNewDelta, updatedAt = now)
+
+            val computedCount = (item.baseCount + updatedDeltas.values.sumOf { it.delta }).coerceAtLeast(0)
+            current[index] = item.copy(
+                count = computedCount,
+                updatedAt = now,
+                deviceDeltas = updatedDeltas
+            )
             saveDenominations(current)
         }
     }
 
-    fun incrementDenomination(value: Double) {
+    fun incrementDenomination(value: Double, deviceId: String = "") {
+        val devId = if (deviceId.isNotBlank()) deviceId else getEffectiveDeviceId()
         val current = _denominationsFlow.value.toMutableList()
         val index = current.indexOfFirst { it.value == value }
         if (index != -1) {
-            current[index] = current[index].copy(count = current[index].count + 1, updatedAt = System.currentTimeMillis())
+            val item = current[index]
+            val now = System.currentTimeMillis()
+            val currentMyDelta = item.deviceDeltas[devId]?.delta ?: 0
+            val updatedDeltas = item.deviceDeltas.toMutableMap()
+            updatedDeltas[devId] = com.example.data.model.DeviceDeltaRecord(delta = currentMyDelta + 1, updatedAt = now)
+
+            val computedCount = (item.baseCount + updatedDeltas.values.sumOf { it.delta }).coerceAtLeast(0)
+            current[index] = item.copy(
+                count = computedCount,
+                updatedAt = now,
+                deviceDeltas = updatedDeltas
+            )
             saveDenominations(current)
         }
     }
 
-    fun decrementDenomination(value: Double) {
+    fun decrementDenomination(value: Double, deviceId: String = "") {
+        val devId = if (deviceId.isNotBlank()) deviceId else getEffectiveDeviceId()
         val current = _denominationsFlow.value.toMutableList()
         val index = current.indexOfFirst { it.value == value }
         if (index != -1 && current[index].count > 0) {
-            current[index] = current[index].copy(count = current[index].count - 1, updatedAt = System.currentTimeMillis())
+            val item = current[index]
+            val now = System.currentTimeMillis()
+            val currentMyDelta = item.deviceDeltas[devId]?.delta ?: 0
+            val updatedDeltas = item.deviceDeltas.toMutableMap()
+            updatedDeltas[devId] = com.example.data.model.DeviceDeltaRecord(delta = currentMyDelta - 1, updatedAt = now)
+
+            val computedCount = (item.baseCount + updatedDeltas.values.sumOf { it.delta }).coerceAtLeast(0)
+            current[index] = item.copy(
+                count = computedCount,
+                updatedAt = now,
+                deviceDeltas = updatedDeltas
+            )
             saveDenominations(current)
         }
     }
 
-    fun resetAllDenominations() {
+    fun resetAllDenominations(deviceId: String = "") {
+        val devId = if (deviceId.isNotBlank()) deviceId else getEffectiveDeviceId()
         val now = System.currentTimeMillis()
-        val current = _denominationsFlow.value.map { it.copy(count = 0, updatedAt = now) }
+        val current = _denominationsFlow.value.map { item ->
+            val updatedDeltas = mapOf(devId to com.example.data.model.DeviceDeltaRecord(delta = 0, updatedAt = now))
+            item.copy(
+                count = 0,
+                baseCount = 0,
+                deviceDeltas = updatedDeltas,
+                updatedAt = now
+            )
+        }
         saveDenominations(current)
     }
 
@@ -365,7 +474,16 @@ class ExpenseRepository(
         val current = _denominationsFlow.value.toMutableList()
         if (current.none { it.value == value }) {
             val isCustom = !defaultDenominationValues.contains(value)
-            current.add(DenominationItem(value = value, count = 0, isCustom = isCustom, updatedAt = System.currentTimeMillis()))
+            current.add(
+                DenominationItem(
+                    value = value,
+                    count = 0,
+                    isCustom = isCustom,
+                    updatedAt = System.currentTimeMillis(),
+                    baseCount = 0,
+                    deviceDeltas = emptyMap()
+                )
+            )
             val sorted = current.sortedByDescending { it.value }
             saveDenominations(sorted)
         }
@@ -373,146 +491,131 @@ class ExpenseRepository(
 
     fun removeDenomination(value: Double) {
         val current = _denominationsFlow.value.filterNot { it.value == value }
-        denomPrefs?.edit()?.remove("count_${value}")?.remove("updated_${value}")?.apply()
+        denomPrefs?.edit()
+            ?.remove("count_${value}")
+            ?.remove("base_${value}")
+            ?.remove("updated_${value}")
+            ?.remove("deltas_${value}")
+            ?.apply()
         saveDenominations(current)
     }
 
-    fun restoreDefaultDenominations() {
-        val currentMap = _denominationsFlow.value.associate { it.value to it.count }
+    fun restoreDefaultDenominations(deviceId: String = "") {
+        val currentMap = _denominationsFlow.value.associateBy { it.value }
         val now = System.currentTimeMillis()
         val restored = defaultDenominationValues.sortedDescending().map { value ->
-            DenominationItem(value = value, count = currentMap[value] ?: 0, isCustom = false, updatedAt = now)
+            val existing = currentMap[value]
+            existing?.copy(isCustom = false, updatedAt = now) ?: DenominationItem(
+                value = value,
+                count = 0,
+                isCustom = false,
+                updatedAt = now,
+                baseCount = 0,
+                deviceDeltas = emptyMap()
+            )
         }
         saveDenominations(restored)
     }
 
-    fun reconcileDenominations(snapshot: SyncSnapshot, allMergedTxs: List<Transaction>): Int {
-        val remoteDenoms = snapshot.denominations
-        if (remoteDenoms.isEmpty()) return 0
-
-        val localDenoms = getDenominations()
-        val localTotal = localDenoms.sumOf { it.subtotal }
-        val remoteTotal = remoteDenoms.sumOf { it.subtotal }
-
-        // 1. Calculate the exact merged Cash in Hand from all active cash transactions in the unified ledger
-        val cashTxs = allMergedTxs.filter { !it.isDeleted && it.accountSourceType == AccountSourceType.CASH }
-        val totalCashIncome = cashTxs.filter { it.type == TransactionType.INCOME }.sumOf { it.amount }
-        val totalCashExpense = cashTxs.filter { it.type == TransactionType.EXPENSE }.sumOf { it.amount }
-        val mergedCashInHand = totalCashIncome - totalCashExpense
-
-        // 2. Find the timestamp of the last transaction performed by each device
-        val remoteTxTimes = snapshot.transactions.filter { !it.isDeleted }.map { it.timestamp } +
-                allMergedTxs.filter { !it.isDeleted && ((snapshot.deviceId.isNotBlank() && it.deviceId == snapshot.deviceId) || (snapshot.deviceName.isNotBlank() && it.deviceName.equals(snapshot.deviceName, ignoreCase = true))) }.map { it.timestamp }
-        val remoteLastTxTime = remoteTxTimes.maxOrNull() ?: 0L
-
-        val localTxTimes = allMergedTxs.filter {
-            !it.isDeleted && (snapshot.deviceId.isBlank() || it.deviceId != snapshot.deviceId) &&
-                    (snapshot.deviceName.isBlank() || !it.deviceName.equals(snapshot.deviceName, ignoreCase = true))
-        }.map { it.timestamp }
-        val localLastTxTime = localTxTimes.maxOrNull() ?: 0L
-
-        val epsilon = 0.001
-        val isLocalExact = Math.abs(localTotal - mergedCashInHand) < epsilon
-        val isRemoteExact = Math.abs(remoteTotal - mergedCashInHand) < epsilon
-
-        val diffLocal = Math.abs(localTotal - mergedCashInHand)
-        val diffRemote = Math.abs(remoteTotal - mergedCashInHand)
-
-        // 3. User Criteria Evaluation:
-        // Rule A: If both devices denomination is same as the cash in hand, check which device did the last transaction and take that.
-        // Rule B: If one device denomination matches the cash in hand exactly, sync with that device.
-        // Rule C: Otherwise check which device is most accurate (closest difference to the cash in hand total).
-        // Tie-breaker: If equally accurate, check which device did the last transaction.
-        val chooseRemote: Boolean = when {
-            isLocalExact && isRemoteExact -> {
-                if (remoteLastTxTime > localLastTxTime) {
-                    true
-                } else if (localLastTxTime > remoteLastTxTime) {
-                    false
-                } else {
-                    val remoteMaxUpdated = remoteDenoms.maxOfOrNull { it.updatedAt } ?: 0L
-                    val localMaxUpdated = localDenoms.maxOfOrNull { it.updatedAt } ?: 0L
-                    remoteMaxUpdated > localMaxUpdated
-                }
-            }
-            isRemoteExact && !isLocalExact -> true
-            isLocalExact && !isRemoteExact -> false
-            diffRemote < diffLocal - epsilon -> true
-            diffLocal < diffRemote - epsilon -> false
-            else -> {
-                if (remoteLastTxTime > localLastTxTime) {
-                    true
-                } else if (localLastTxTime > remoteLastTxTime) {
-                    false
-                } else {
-                    val remoteMaxUpdated = remoteDenoms.maxOfOrNull { it.updatedAt } ?: 0L
-                    val localMaxUpdated = localDenoms.maxOfOrNull { it.updatedAt } ?: 0L
-                    remoteMaxUpdated > localMaxUpdated
-                }
-            }
-        }
-
-        var changedCount = 0
-        if (chooseRemote) {
-            val resultMap = mutableMapOf<Double, DenominationItem>()
-            // Populate existing local keys so custom denomination definitions are not lost
-            for (loc in localDenoms) {
-                resultMap[loc.value] = loc.copy(count = 0)
-            }
-            // Apply winning remote counts
-            for (rem in remoteDenoms) {
-                val existing = resultMap[rem.value]
-                if (existing == null || existing.count != rem.count) {
-                    changedCount++
-                }
-                resultMap[rem.value] = rem
-            }
-            val mergedList = resultMap.values.sortedByDescending { it.value }
-            saveDenominations(mergedList)
-        } else {
-            // Keep local denomination counts, but ensure any newly introduced custom denomination types from peer are registered
-            val resultMap = localDenoms.associateBy { it.value }.toMutableMap()
-            var addedNewType = false
-            for (rem in remoteDenoms) {
-                if (!resultMap.containsKey(rem.value)) {
-                    resultMap[rem.value] = rem.copy(count = 0)
-                    addedNewType = true
-                    changedCount++
-                }
-            }
-            if (addedNewType) {
-                saveDenominations(resultMap.values.sortedByDescending { it.value })
-            }
-        }
-
-        return changedCount
-    }
-
-    fun mergeDenominations(remoteDenominations: List<DenominationItem>): Int {
+    /**
+     * Vector Delta CRDT Merge for Cash Denominations:
+     * Synchronizes physical cash counts across 2, 3, or N peer devices in any order.
+     * Merges per-device delta vectors so local additions and deductions propagate without data loss or double-counting.
+     */
+    fun mergeDenominationsVector(snapshot: SyncSnapshot, localDeviceId: String = ""): Int {
+        val remoteDenominations = snapshot.denominations
         if (remoteDenominations.isEmpty()) return 0
+        val myDevId = if (localDeviceId.isNotBlank()) localDeviceId else getEffectiveDeviceId()
+        val remoteDevId = snapshot.deviceId
+
         val localList = getDenominations().toMutableList()
         val localMap = localList.associateBy { it.value }.toMutableMap()
+        val now = System.currentTimeMillis()
         var changedCount = 0
 
-        for (remote in remoteDenominations) {
-            val local = localMap[remote.value]
-            if (local == null) {
-                // New custom denomination discovered from peer device
-                localMap[remote.value] = remote
+        val allValues = (localMap.keys + remoteDenominations.map { it.value }).distinct()
+        val mergedResult = mutableListOf<DenominationItem>()
+
+        for (value in allValues) {
+            val localItem = localMap[value]
+            val remoteItem = remoteDenominations.firstOrNull { it.value == value }
+
+            val isCustom = (localItem?.isCustom == true) || (remoteItem?.isCustom == true)
+
+            if (localItem == null && remoteItem != null) {
+                // New denomination discovered from peer
+                mergedResult.add(remoteItem.copy(updatedAt = now))
                 changedCount++
-            } else {
-                // Remote updated count or newer timestamp
-                if (remote.updatedAt > local.updatedAt || (local.count == 0 && remote.count > 0)) {
-                    localMap[remote.value] = remote
+                continue
+            }
+
+            if (remoteItem == null && localItem != null) {
+                // Present locally
+                mergedResult.add(localItem)
+                continue
+            }
+
+            if (localItem != null && remoteItem != null) {
+                // Base Count:
+                val baseCount = if (localItem.baseCount == remoteItem.baseCount) {
+                    localItem.baseCount
+                } else {
+                    if (localItem.updatedAt >= remoteItem.updatedAt) localItem.baseCount else remoteItem.baseCount
+                }
+
+                // Merge Device Deltas Map (Per-Device Vector Clock)
+                val mergedDeltas = mutableMapOf<String, com.example.data.model.DeviceDeltaRecord>()
+                val allDevIds = (localItem.deviceDeltas.keys + remoteItem.deviceDeltas.keys).distinct()
+
+                for (devId in allDevIds) {
+                    val locRec = localItem.deviceDeltas[devId]
+                    val remRec = remoteItem.deviceDeltas[devId]
+
+                    when {
+                        locRec != null && remRec == null -> {
+                            mergedDeltas[devId] = locRec
+                        }
+                        remRec != null && locRec == null -> {
+                            mergedDeltas[devId] = remRec
+                        }
+                        locRec != null && remRec != null -> {
+                            if (devId == myDevId && myDevId.isNotBlank()) {
+                                mergedDeltas[devId] = if (locRec.updatedAt >= remRec.updatedAt) locRec else remRec
+                            } else if (devId == remoteDevId && remoteDevId.isNotBlank()) {
+                                mergedDeltas[devId] = if (remRec.updatedAt >= locRec.updatedAt) remRec else locRec
+                            } else {
+                                val winningRec = if (remRec.updatedAt > locRec.updatedAt) remRec else locRec
+                                mergedDeltas[devId] = winningRec
+                            }
+                        }
+                    }
+                }
+
+                val finalCount = if (mergedDeltas.isEmpty()) {
+                    if (remoteItem.updatedAt > localItem.updatedAt) remoteItem.count else localItem.count
+                } else {
+                    (baseCount + mergedDeltas.values.sumOf { it.delta }).coerceAtLeast(0)
+                }
+
+                if (finalCount != localItem.count || mergedDeltas != localItem.deviceDeltas) {
                     changedCount++
                 }
+
+                mergedResult.add(
+                    DenominationItem(
+                        value = value,
+                        count = finalCount,
+                        isCustom = isCustom,
+                        updatedAt = maxOf(localItem.updatedAt, remoteItem.updatedAt, now),
+                        baseCount = baseCount,
+                        deviceDeltas = mergedDeltas
+                    )
+                )
             }
         }
 
-        if (changedCount > 0) {
-            val mergedList = localMap.values.sortedByDescending { it.value }
-            saveDenominations(mergedList)
-        }
+        val sortedResult = mergedResult.sortedByDescending { it.value }
+        saveDenominations(sortedResult)
         return changedCount
     }
 
@@ -668,8 +771,18 @@ class ExpenseRepository(
             val dObj = JSONObject()
             dObj.put("value", d.value)
             dObj.put("count", d.count)
+            dObj.put("baseCount", d.baseCount)
             dObj.put("isCustom", d.isCustom)
             dObj.put("updatedAt", d.updatedAt)
+
+            val deltasObj = JSONObject()
+            for ((devId, record) in d.deviceDeltas) {
+                val recObj = JSONObject()
+                recObj.put("delta", record.delta)
+                recObj.put("updatedAt", record.updatedAt)
+                deltasObj.put(devId, recObj)
+            }
+            dObj.put("deviceDeltas", deltasObj)
             denomArray.put(dObj)
         }
         root.put("denominations", denomArray)
@@ -821,14 +934,42 @@ class ExpenseRepository(
         if (denomArray != null) {
             for (i in 0 until denomArray.length()) {
                 val obj = denomArray.getJSONObject(i)
-                val denom = DenominationItem(
-                    value = obj.optDouble("value", 0.0),
-                    count = obj.optInt("count", 0),
-                    isCustom = obj.optBoolean("isCustom", false),
-                    updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
-                )
-                if (denom.value > 0.0) {
-                    denomList.add(denom)
+                val value = obj.optDouble("value", 0.0)
+                val count = obj.optInt("count", 0)
+                val baseCount = obj.optInt("baseCount", count)
+                val isCustom = obj.optBoolean("isCustom", false)
+                val updatedAt = obj.optLong("updatedAt", System.currentTimeMillis())
+
+                val deltasMap = mutableMapOf<String, com.example.data.model.DeviceDeltaRecord>()
+                val deltasObj = obj.optJSONObject("deviceDeltas")
+                if (deltasObj != null) {
+                    val keys = deltasObj.keys()
+                    while (keys.hasNext()) {
+                        val k = keys.next()
+                        val rObj = deltasObj.optJSONObject(k)
+                        if (rObj != null) {
+                            deltasMap[k] = com.example.data.model.DeviceDeltaRecord(
+                                delta = rObj.optInt("delta", 0),
+                                updatedAt = rObj.optLong("updatedAt", updatedAt)
+                            )
+                        } else {
+                            val dInt = deltasObj.optInt(k, 0)
+                            deltasMap[k] = com.example.data.model.DeviceDeltaRecord(delta = dInt, updatedAt = updatedAt)
+                        }
+                    }
+                }
+
+                if (value > 0.0) {
+                    denomList.add(
+                        DenominationItem(
+                            value = value,
+                            count = count,
+                            isCustom = isCustom,
+                            updatedAt = updatedAt,
+                            baseCount = baseCount,
+                            deviceDeltas = deltasMap
+                        )
+                    )
                 }
             }
         }
@@ -893,10 +1034,9 @@ class ExpenseRepository(
             mergedCount += snapshot.reservedPayments.size
         }
 
-        // Merge cash denominations with smart accuracy & cash-in-hand reconciliation
+        // Merge cash denominations with Vector Delta CRDT synchronization
         if (snapshot.denominations.isNotEmpty()) {
-            val allMergedTxs = transactionDao.getAllTransactionsSnapshot()
-            val denomMerged = reconcileDenominations(snapshot, allMergedTxs)
+            val denomMerged = mergeDenominationsVector(snapshot)
             mergedCount += denomMerged
         }
 

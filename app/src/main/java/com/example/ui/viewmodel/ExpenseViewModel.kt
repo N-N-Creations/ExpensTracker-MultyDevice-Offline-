@@ -554,19 +554,23 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
 
 
     fun updateDenominationCount(value: Double, newCount: Int) {
-        repository.updateDenominationCount(value, newCount)
+        val currentDevId = deviceId.value
+        repository.updateDenominationCount(value, newCount, currentDevId)
     }
 
     fun incrementDenomination(value: Double) {
-        repository.incrementDenomination(value)
+        val currentDevId = deviceId.value
+        repository.incrementDenomination(value, currentDevId)
     }
 
     fun decrementDenomination(value: Double) {
-        repository.decrementDenomination(value)
+        val currentDevId = deviceId.value
+        repository.decrementDenomination(value, currentDevId)
     }
 
     fun resetAllDenominations() {
-        repository.resetAllDenominations()
+        val currentDevId = deviceId.value
+        repository.resetAllDenominations(currentDevId)
     }
 
     fun addCustomDenomination(value: Double) {
@@ -578,7 +582,8 @@ class ExpenseViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun restoreDefaultDenominations() {
-        repository.restoreDefaultDenominations()
+        val currentDevId = deviceId.value
+        repository.restoreDefaultDenominations(currentDevId)
     }
 
     init {

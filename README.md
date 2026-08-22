@@ -80,10 +80,9 @@ Sync your ledger across your phone, tablet, and family devices seamlessly over y
 - **Conflict-Free Two-Way Merge**: Every transaction is assigned an immutable UUID, ensuring duplicate-free reconciliation.
 - **Incremental Fast Delta Sync**: High-speed syncing based on per-device transaction timestamps.
 - **Device Origin Attribution**: Every synced record identifies its originating device (e.g., `Pixel 8`, `Galaxy S24`).
-- **3-Tier Smart Denomination Reconciliation**:
-  1. *Exact Ledger Match*: Adopts the physical cash breakdown matching the new merged cash-in-hand total.
-  2. *Closest Accuracy*: Selects the configuration with the smallest variance against the combined ledger.
-  3. *Timestamp Priority*: Retains the most recently updated count while preserving custom peer denominations.
+- **🧮 Vector Delta (CRDT) Denomination Synchronization**:
+  - Employs an additive Vector Delta (Conflict-Free Replicated Data Type) model for banknote and coin counts.
+  - Automatically merges physical cash additions and deductions across 3 or more devices in any sync order ($A \leftrightarrow B$, $B \leftrightarrow C$, $A \leftrightarrow C$) with zero data loss, baseline drift, or double-counting.
 </details>
 
 ### 6. 📈 Financial Analytics & Visual Reports
